@@ -10,13 +10,12 @@
 #include <iostream>
 #include <windows.h>
 
-#define DEBUG 0
+#define DEBUG 2
 
 using namespace cv;
 using namespace std;
 
 Mat src,extrxtd;
-int dim;
 
 void getImageFromDialog(Mat& img)
 {
@@ -142,7 +141,12 @@ void extractBook(int,void*)
 	//Mat mu,sigma;
 	Mat canny_output;
 	//meanStdDev(gscl,mu,sigma);
-	Canny(srcbl, canny_output, 5,55,3);
+	Canny(srcbl, canny_output, 5,60,3);
+	imshow("c1",canny_output);
+	//Mat element = getStructuringElement( 0, Size( 3,3 ), Point( 1,1 ) );
+	/// Apply the specified morphology operation
+	//morphologyEx( canny_output, canny_output, CV_MOP_OPEN, element );
+	//imshow("c2",canny_output);
 	rectangle(canny_output,Rect(0,0,canny_output.cols,canny_output.rows),Scalar(0),8);
 	if(DEBUG) imshow("canny",canny_output);
 	if(DEBUG>1) imwrite("dbg/canny1.jpg",canny_output);
@@ -273,6 +277,11 @@ void extractBook(int,void*)
 	{
 		interKM.at<float>(i,0)=intersections[i].x;
 		interKM.at<float>(i,1)=intersections[i].y;
+	}
+	if(intersections.size()<4)
+	{
+		cerr<<"Error: less than 4 intersection points";
+		return;
 	}
 	kmeans(interKM, 4, interLB, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 1000, 0.0001), 5, KMEANS_PP_CENTERS, interC);
 	Point cntr;
@@ -410,9 +419,19 @@ int main( int argc, char** argv )
 		waitKey(0);
 		return -1;
 	}
-	dim=max(src.rows,src.cols);
-	int marg0=dim/150;
-	src=src(Rect(marg0,marg0,src.cols-marg0,src.rows-marg0));
+	if(max(src.rows,src.cols)>900)
+	{
+		Size sz;
+		if(src.rows>src.cols)
+		{
+			sz=Size((src.cols*900)/src.rows,900);
+		}else
+		{
+			sz=Size(900,(src.rows*900)/src.cols);
+		}
+		resize(src,src,sz);
+	}
+	src=src(Rect(2,2,src.cols-2,src.rows-2));
 	if(DEBUG) cvNamedWindow("Source Image");
 	if(DEBUG) cvSetMouseCallback("Source Image", mousePositionOut, &src);
 	if(DEBUG) imshow("Source Image",src);
@@ -420,7 +439,7 @@ int main( int argc, char** argv )
 	extractBook(0,0);
 	imwrite("out.jpg",extrxtd);
 
-	if(DEBUG) 
+	//if(DEBUG) 
 		waitKey(0);
 	return 0;
 }
