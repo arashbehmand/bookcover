@@ -16,6 +16,8 @@ using namespace cv;
 using namespace std;
 
 Mat src,extrxtd;
+Point UL,UR,LL,LR;
+int taskLatch=-1;
 
 void getImageFromDialog(Mat& img)
 {
@@ -102,82 +104,50 @@ Point2f computeIntersect(Vec2f line1, Vec2f line2)
     return intersect;
 }
 
-void extractBook(int,void*)
+void extractPoints(int,void*)
 {
 	Mat hsv,srcbl,gscl,dst,cdst;
-	vector<Mat> hsv_plane;
-	GaussianBlur(src,srcbl,cv::Size(15,15),2,2);
-	//cvtColor(srcbl,hsv,CV_BGR2HSV);
-	/*
-	Mat samples(src.rows * src.cols, 3, CV_32F);
-	for( int y = 0; y < src.rows; y++ )
-		for( int x = 0; x < src.cols; x++ )
-			for( int z = 0; z < 3; z++)
-				samples.at<float>(y + x*src.rows, z) = hsv.at<Vec3b>(y,x)[z];
-
-
-	int clusterCount = 10;
-	Mat labels;
-	int attempts = 3;
-	Mat centers;
-	kmeans(samples, clusterCount, labels, TermCriteria(CV_TERMCRIT_ITER|CV_TERMCRIT_EPS, 1000, 0.0001), attempts, KMEANS_PP_CENTERS, centers );
-
-	Mat new_image( src.size(), src.type() );
-	for( int y = 0; y < src.rows; y++ )
-		for( int x = 0; x < src.cols; x++ )
-		{ 
-			int cluster_idx = labels.at<int>(y + x*src.rows,0);
-			new_image.at<Vec3b>(y,x)[0] = centers.at<float>(cluster_idx, 0);
-			new_image.at<Vec3b>(y,x)[1] = centers.at<float>(cluster_idx, 1);
-			new_image.at<Vec3b>(y,x)[2] = centers.at<float>(cluster_idx, 2);
+	src=src(Rect(2,2,src.cols-2,src.rows-2));
+	int curdim=max(src.rows,src.cols);
+	int ndim=700;
+	if(curdim>ndim)
+	{
+		Size sz;
+		if(src.rows>src.cols)
+		{
+			sz=Size((src.cols*ndim)/src.rows,ndim);
+		}else
+		{
+			sz=Size(ndim,(src.rows*ndim)/src.cols);
 		}
-	cvtColor(new_image,new_image,CV_HSV2BGR);
-	if(DEBUG) imshow( "clustered image", new_image );*/
-	//cvtColor(srcbl,gscl,CV_BGR2GRAY);
-	//split(hsv,hsv_plane);
-	//gscl=new_image.clone();//hsv_plane[0].clone();
-	//threshold(gscl,gscl,0,255,CV_THRESH_BINARY | CV_THRESH_OTSU);
-	//if(DEBUG) imshow("gscl",gscl);
-	//Mat mu,sigma;
-	Mat canny_output;
-	//meanStdDev(gscl,mu,sigma);
-	Canny(srcbl, canny_output, 5,60,3);
-	imshow("c1",canny_output);
-	//Mat element = getStructuringElement( 0, Size( 3,3 ), Point( 1,1 ) );
-	/// Apply the specified morphology operation
-	//morphologyEx( canny_output, canny_output, CV_MOP_OPEN, element );
-	//imshow("c2",canny_output);
-	rectangle(canny_output,Rect(0,0,canny_output.cols,canny_output.rows),Scalar(0),8);
-	if(DEBUG) imshow("canny",canny_output);
-	if(DEBUG>1) imwrite("dbg/canny1.jpg",canny_output);
-	cvtColor(canny_output, cdst, CV_GRAY2BGR);
- #if 0
-  vector<Vec2f> lines;
-  HoughLines(dst, lines, 5, 5*CV_PI/180, 150, 0, 0 );
+		resize(src,src,sz);
+	}
+	GaussianBlur(src,srcbl,cv::Size(15,15),1.9,1.9);
 
-  for( size_t i = 0; i < lines.size(); i++ )
-  {
-     float rho = lines[i][0], theta = lines[i][1];
-     Point pt1, pt2;
-     double a = cos(theta), b = sin(theta);
-     double x0 = a*rho, y0 = b*rho;
-     pt1.x = cvRound(x0 + 1000*(-b));
-     pt1.y = cvRound(y0 + 1000*(a));
-     pt2.x = cvRound(x0 - 1000*(-b));
-     pt2.y = cvRound(y0 - 1000*(a));
-     line( cdst, pt1, pt2, Scalar(0,0,255), 1, CV_AA);
-  }
- #else
+	vector<Mat> hsv_plane;
+	//
+	//srcbl=src.clone();
+	Mat canny_output;
+
+	Canny(srcbl, canny_output, 2,50,3);
+	if(DEBUG & 0x01) imshow("c1",canny_output);
+	
+	rectangle(canny_output,Rect(0,0,canny_output.cols,canny_output.rows),Scalar(0),7);
+	if(DEBUG & 0x01) imshow("canny",canny_output);
+	if(DEBUG & 0x02) imwrite("dbg/01-canny1.jpg",canny_output);
+	cvtColor(canny_output, cdst, CV_GRAY2BGR);
+
+
   vector<Vec4i> lines;
-  HoughLinesP(canny_output, lines, 5, 30*CV_PI/180, 50, 25, 25 );
+  HoughLinesP(canny_output, lines, 4, 30*CV_PI/180, 50, 25, 40 );
   for( size_t i = 0; i < lines.size(); i++ )
   {
     Vec4i l = lines[i];
     line( cdst, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(0,0,255), 1, CV_AA);
   }
- #endif
-  if(DEBUG) imshow("detected lines",cdst);
-  if(DEBUG>1) imwrite("dbg/ht1.jpg",cdst);
+
+  if(DEBUG & 0x01) imshow("detected lines",cdst);
+  if(DEBUG & 0x02) imwrite("dbg/02-ht1.jpg",cdst);
   vector<vector<Point> > contours;
   vector<Vec4i> hierarchy;
 
@@ -201,7 +171,7 @@ void extractBook(int,void*)
 	{
 		Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
 		//drawContours( drawing1, contours, i, color, 1, 8, vector<Vec4i>(), 0, Point() );
-		drawContours( drawing1, hull, i, color, 1, 8, vector<Vec4i>(), 0, Point() );
+		if(DEBUG & 0x03) drawContours( drawing1, hull, i, color, 1, 8, vector<Vec4i>(), 0, Point() );
 		double area=contourArea(hull[i]);
 		if(area>Max)
 		{
@@ -209,24 +179,17 @@ void extractBook(int,void*)
 			MaxI=i;
 		}
 	}	
-	if(DEBUG) imshow("cv hu",drawing1);
-	if(DEBUG>1) imwrite("dbg/cvxhul.jpg",drawing1);
+	if(DEBUG & 0x01) imshow("cv hu",drawing1);
+	if(DEBUG & 0x02) imwrite("dbg/03-cvxhul.jpg",drawing1);
 	Mat maskOvly = Mat::zeros( src.size(), CV_8UC1 );
+
 	drawContours(maskOvly,hull,MaxI,Scalar(255),40,8);
-	if(DEBUG>1) imwrite("dbg/mask.jpg",maskOvly);
+	if(DEBUG & 0x02) imwrite("dbg/04-mask.jpg",maskOvly);
 	Mat newCny;
 	bitwise_and(canny_output,maskOvly,newCny);
-	if(DEBUG) imshow("newCny",newCny);
-	if(DEBUG>1) imwrite("dbg/canny2.jpg",newCny);
-	//vector<Vec4i> linesF;
-	//HoughLinesP(newCny, linesF, 1, CV_PI/180, 50, 150, 50 );
-	//newCny=Mat::zeros( src.size(), CV_8UC1 );
-	//for( size_t i = 0; i < linesF.size(); i++ )
-	//{
-	//	Vec4i l = linesF[i];
-	//	line( newCny, Point(l[0], l[1]), Point(l[2], l[3]), Scalar(128), 1, CV_AA);
-	//}
-	//imshow("lines",newCny);
+	if(DEBUG & 0x01) imshow("newCny",newCny);
+	if(DEBUG & 0x02) imwrite("dbg/05-canny2.jpg",newCny);
+
 	vector<Vec2f> linesF;
 	HoughLines(newCny, linesF, 1, 1*CV_PI/180, 50, 0, 0 );
 	newCny=Mat::zeros( src.size(), CV_8UC1 );
@@ -242,8 +205,8 @@ void extractBook(int,void*)
 		pt2.y = cvRound(y0 - 10000*(a));
 		line( newCny, pt1, pt2, Scalar(255), 1, CV_AA);
 	}
-	if(DEBUG) imshow("lines",newCny);
-	if(DEBUG>1) imwrite("dbg/ht2.jpg",newCny);
+	if(DEBUG & 0x01) imshow("lines",newCny);
+	if(DEBUG & 0x02) imwrite("dbg/06-ht2.jpg",newCny);
 
 	vector<Point2f> intersections;
     for( size_t i = 0; i < linesF.size(); i++ )
@@ -278,6 +241,10 @@ void extractBook(int,void*)
 		interKM.at<float>(i,0)=intersections[i].x;
 		interKM.at<float>(i,1)=intersections[i].y;
 	}
+	UL=Point(-1,-1);
+	LL=Point(-1,-1);
+	UR=Point(-1,-1);
+	LR=Point(-1,-1);
 	if(intersections.size()<4)
 	{
 		cerr<<"Error: less than 4 intersection points";
@@ -290,10 +257,9 @@ void extractBook(int,void*)
 		cntr+=Point(interC.at<float>(i,0),interC.at<float>(i,1));
 		circle(fnl, Point(interC.at<float>(i,0),interC.at<float>(i,1)), 3, Scalar(0, 0, 255), 3);
 	}
-	if(DEBUG) imshow("!",fnl);
-	if(DEBUG>1) imwrite("dbg/marks.jpg",fnl);
+	if(DEBUG & 0x01) imshow("!",fnl);
+	if(DEBUG & 0x02) imwrite("dbg/07-marks.jpg",fnl);
 	cntr=0.25*cntr;
-	Point UL,UR,LL,LR;
 	for(int i=0;i<4;i++)
 	{
 		if(interC.at<float>(i,1)<cntr.y)
@@ -316,12 +282,153 @@ void extractBook(int,void*)
 			}
 		}
 	}
+
+	/*
+	/// Detector parameters
+	int blockSize = 10;
+	int apertureSize = 5;
+	double k = 0.05;
+	Mat cd,cdn,cdns;
+	cvtColor(srcbl,cd,CV_BGR2GRAY);
+	Mat maskOvlyCD1 = Mat::zeros( src.size(), CV_8UC1 );
+	Mat maskOvlyCD2 = Mat::zeros( src.size(), CV_8UC1 );
+	circle(maskOvlyCD1, UL, 20, Scalar(255), 41);
+	circle(maskOvlyCD1, UR, 20, Scalar(255), 41);
+	circle(maskOvlyCD1, LL, 20, Scalar(255), 41);
+	circle(maskOvlyCD1, LR, 20, Scalar(255), 41);
+	circle(maskOvlyCD2, UL, 10, Scalar(255), 21);
+	circle(maskOvlyCD2, UR, 10, Scalar(255), 21);
+	circle(maskOvlyCD2, LL, 10, Scalar(255), 21);
+	circle(maskOvlyCD2, LR, 10, Scalar(255), 21);
+	GaussianBlur(maskOvlyCD1,maskOvlyCD1,Size(31,31),15,15);
+	imshow("cd_g",cd);
+#undef min
+	//min(cd,maskOvlyCD1,cd);
+	imshow("cd",cd);
+	/// Detecting corners
+	cornerHarris( cd, cd, blockSize, apertureSize, k, BORDER_DEFAULT );
+
+	/// Normalizing
+	normalize( cd, cdn, 0, 255, NORM_MINMAX, CV_32FC1, Mat() );
+	convertScaleAbs( cdn, cdns );
+	cdns.convertTo(cdns,CV_8UC1);
+	imshow("cdns",cdns);
+	min(cdns,maskOvlyCD2,cdn);
+	cdns=cdn.clone();
+	/// Drawing a circle around corners
+	for( int j = 0; j < cdn.rows ; j++ )
+	{
+		for( int i = 0; i < cdn.cols; i++ )
+		{
+			if( (int) cdn.at<uchar>(j,i) >	30 )
+			{
+				circle( cdns, Point( i, j ), 5,  Scalar(255), 2, 8, 0 );
+			}
+		}
+	}*/
+	//imshow("cdns",cdns);
+  Mat cd;
+  int blockSize = 3; int apertureSize = 3;
+  int myShiTomasi_qualityLevel = 1;
+  int max_qualityLevel = 100;
+  double myShiTomasi_minVal; double myShiTomasi_maxVal;
+  cvtColor(srcbl,cd,CV_BGR2GRAY);
+  Mat myShiTomasi_dst = Mat::zeros( cd.size(), CV_32FC1 );
+  cornerMinEigenVal( cd, myShiTomasi_dst, blockSize, apertureSize, BORDER_DEFAULT );
+  minMaxLoc( myShiTomasi_dst, &myShiTomasi_minVal, &myShiTomasi_maxVal, 0, 0, Mat() );  
+  normalize(myShiTomasi_dst,myShiTomasi_dst,0,255,NORM_MINMAX,CV_8UC1);
+
+  /*if( myShiTomasi_qualityLevel < 1 ) { myShiTomasi_qualityLevel = 1; }
+  
+  for( int j = 0; j < myShiTomasi_dst.rows; j++ )
+     { for( int i = 0; i < myShiTomasi_dst.cols; i++ )
+          {
+            if( myShiTomasi_dst.at<float>(j,i) > myShiTomasi_minVal + ( myShiTomasi_maxVal - myShiTomasi_minVal )*myShiTomasi_qualityLevel/max_qualityLevel )
+              { myShiTomasi_copy.at<uchar>(j,i)=(uchar)((myShiTomasi_dst.at<float>(j,i)-myShiTomasi_minVal)/( myShiTomasi_maxVal - myShiTomasi_minVal )*255); }
+          }
+     }*/
+  Mat myShiTomasi_chs[3],myShiTomasi_RGB;
+	myShiTomasi_chs[0]=myShiTomasi_dst.clone();
+	myShiTomasi_chs[1]=myShiTomasi_dst.clone();
+	myShiTomasi_chs[2]=myShiTomasi_dst.clone();
+	
+#undef min
+#undef max
+	Mat maskOvlyCD;
+	double maxv;
+	int maxIdx[2];
+	maskOvlyCD = Mat::zeros( src.size(), CV_8UC1 );
+	circle(maskOvlyCD, UL, 5, Scalar(255), 11);
+	GaussianBlur(maskOvlyCD,maskOvlyCD,Size(11,11),10,10);
+	if(DEBUG) max(myShiTomasi_chs[1],maskOvlyCD,myShiTomasi_chs[1]);
+	min(myShiTomasi_dst,maskOvlyCD,maskOvlyCD);
+	minMaxIdx(maskOvlyCD,0,&maxv,0,maxIdx);
+	if(norm(UL-Point(maxIdx[1],maxIdx[0]))<10)
+	{
+		if(DEBUG) circle(myShiTomasi_chs[2],Point(maxIdx[1],maxIdx[0]),3,Scalar(255),2);
+		cout<<"UL"<<endl;
+		UL=Point(maxIdx[1],maxIdx[0]);
+	}
+	
+	maskOvlyCD = Mat::zeros( src.size(), CV_8UC1 );
+	circle(maskOvlyCD, UR, 5, Scalar(255), 11);
+	GaussianBlur(maskOvlyCD,maskOvlyCD,Size(11,11),10,10);
+	if(DEBUG) max(myShiTomasi_chs[1],maskOvlyCD,myShiTomasi_chs[1]);
+	min(myShiTomasi_dst,maskOvlyCD,maskOvlyCD);
+	minMaxIdx(maskOvlyCD,0,&maxv,0,maxIdx);
+	if(norm(UR-Point(maxIdx[1],maxIdx[0]))<10)
+	{
+		if(DEBUG) circle(myShiTomasi_chs[2],Point(maxIdx[1],maxIdx[0]),3,Scalar(255),2);
+		cout<<"UR"<<endl;
+		UR=Point(maxIdx[1],maxIdx[0]);
+	}
+
+	maskOvlyCD = Mat::zeros( src.size(), CV_8UC1 );
+	circle(maskOvlyCD, LL, 5, Scalar(255), 11);
+	GaussianBlur(maskOvlyCD,maskOvlyCD,Size(11,11),10,10);
+	if(DEBUG) max(myShiTomasi_chs[1],maskOvlyCD,myShiTomasi_chs[1]);
+	min(myShiTomasi_dst,maskOvlyCD,maskOvlyCD);
+	minMaxIdx(maskOvlyCD,0,&maxv,0,maxIdx);
+	if(norm(LL-Point(maxIdx[1],maxIdx[0]))<10)
+	{
+		if(DEBUG) circle(myShiTomasi_chs[2],Point(maxIdx[1],maxIdx[0]),3,Scalar(255),2);
+		cout<<"LL"<<endl;
+		LL=Point(maxIdx[1],maxIdx[0]);
+	}
+
+	maskOvlyCD = Mat::zeros( src.size(), CV_8UC1 );
+	circle(maskOvlyCD, LR, 5, Scalar(255), 11);
+	GaussianBlur(maskOvlyCD,maskOvlyCD,Size(11,11),10,10);
+	if(DEBUG) max(myShiTomasi_chs[1],maskOvlyCD,myShiTomasi_chs[1]);
+	min(myShiTomasi_dst,maskOvlyCD,maskOvlyCD);
+	minMaxIdx(maskOvlyCD,0,&maxv,0,maxIdx);
+	if(norm(LR-Point(maxIdx[1],maxIdx[0]))<10)
+	{
+		if(DEBUG) circle(myShiTomasi_chs[2],Point(maxIdx[1],maxIdx[0]),3,Scalar(255),2);
+		cout<<"LR"<<endl;
+		LR=Point(maxIdx[1],maxIdx[0]);
+	}
+
+	merge(myShiTomasi_chs,3,myShiTomasi_RGB);
+	
+	if(DEBUG & 0x01) imshow("shithomasi",myShiTomasi_RGB);
+	if(DEBUG & 0x02) imwrite("dbg/08-shithomasi.jpg",myShiTomasi_RGB);
+}
+
+void interactPoints(int,void*)
+{
+	Mat fnl=src.clone();
+	circle(fnl, UL, 3, Scalar(0  , 255,   0), 3);
+	circle(fnl, UR, 3, Scalar(255, 255,   0), 3);
+	circle(fnl, LL, 3, Scalar(0  , 255, 255), 3);
+	circle(fnl, LR, 3, Scalar(255,   0, 255), 3);
+	imshow("Fine Tune",fnl);
+}
+
+void extractBook(int,void*)
+{
 	extrxtd=Mat(600,420,CV_8UC3);
 	cout<<extrxtd.rows<<" "<<extrxtd.cols<<endl;
-	cout<<UL<<endl;
-	cout<<UR<<endl;
-	cout<<LL<<endl;
-	cout<<LR<<endl;
 	vector<Point2f> cr,ds;
 	cr.push_back(Point2f(UL));
 	ds.push_back(Point2f(0,0));
@@ -334,75 +441,42 @@ void extractBook(int,void*)
 
 	Mat trnsfrm=getPerspectiveTransform(cr,ds);
 	warpPerspective(src,extrxtd,trnsfrm,extrxtd.size());
-	if(DEBUG) imshow("extrxtd",extrxtd);
-	/*
+	//if(DEBUG & 0x01) 
+	imshow("extrxtd",extrxtd);
+}
 
-	{
-		vector<Mat> channels;
-		split(extrxtd,channels);
-        Mat B,G,R;
-
-        equalizeHist( channels[0], B );
-        equalizeHist( channels[1], G );
-        equalizeHist( channels[2], R );
-        vector<Mat> combined;
-        combined.push_back(B);
-        combined.push_back(G);
-        combined.push_back(R);
-        Mat result;
-        merge(combined,result);
-        imshow("eqhist",result);
+void mouseInteractPoints( int event, int x, int y, int flags, void* param ){
+	Point p(x,y);
+	switch( event ){
+	case CV_EVENT_LBUTTONDOWN:
+		if(norm((p-UL))<10)
+			taskLatch=1;
+		else if(norm((p-UR))<10)
+			taskLatch=2;
+		else if(norm((p-LL))<10)
+			taskLatch=3;
+		else if(norm((p-LR))<10)
+			taskLatch=4;
+		else
+			taskLatch=-1;
+		printf("(%d,%d) TL=%d\r\n",x,y,taskLatch);
+		break;
+	case CV_EVENT_LBUTTONUP:
+		switch(taskLatch)
+		{
+			case 1: UL=p; break;
+			case 2: UR=p; break;
+			case 3: LL=p; break;
+			case 4: LR=p; break;
+		}
+		taskLatch=-1;
+		interactPoints(0,0);
+		printf("(%d,%d)\r\n",x,y);
+		break;
+	case CV_EVENT_RBUTTONDOWN:
+		extractBook(0,0);
+		break;
 	}
-
-	{
-		vector<Mat> channels;
-		split(extrxtd,channels);
-        Mat B,G,R;
-
-		Ptr<CLAHE> claheB,claheG,claheR;
-		claheB = createCLAHE();
-		claheB->setClipLimit(4);
-        claheB->apply( channels[0], B );
-
-        claheG = createCLAHE();
-		claheG->setClipLimit(4);
-        claheG->apply( channels[1], G );
-
-        claheR = createCLAHE();
-		claheR->setClipLimit(4);
-        claheR->apply( channels[2], R );
-        vector<Mat> combined;
-        combined.push_back(B);
-        combined.push_back(G);
-        combined.push_back(R);
-        Mat result;
-        merge(combined,result);
-        imshow("clahe",result);
-	}
-	*/
-  /*/// Detector parameters
-  int blockSize = 2;
-  int apertureSize = 3;
-  double k = 0.04;
-  Mat cd,cdn,cdns;
-  /// Detecting corners
-  cornerHarris( srcbl, cd, blockSize, apertureSize, k, BORDER_DEFAULT );
-
-  /// Normalizing
-  normalize( cd, cdn, 0, 255, NORM_MINMAX, CV_32FC1, Mat() );
-  convertScaleAbs( cdn, cdns );
-
-  /// Drawing a circle around corners
-  for( int j = 0; j < cdn.rows ; j++ )
-     { for( int i = 0; i < cdn.cols; i++ )
-          {
-            if( (int) cdn.at<float>(j,i) >	100 )
-              {
-               circle( cdns, Point( i, j ), 5,  Scalar(0), 2, 8, 0 );
-              }
-          }
-     }
-  imshow("cdns",cdns);*/
 }
 
 int main( int argc, char** argv )
@@ -419,27 +493,20 @@ int main( int argc, char** argv )
 		waitKey(0);
 		return -1;
 	}
-	if(max(src.rows,src.cols)>900)
-	{
-		Size sz;
-		if(src.rows>src.cols)
-		{
-			sz=Size((src.cols*900)/src.rows,900);
-		}else
-		{
-			sz=Size(900,(src.rows*900)/src.cols);
-		}
-		resize(src,src,sz);
-	}
-	src=src(Rect(2,2,src.cols-2,src.rows-2));
-	if(DEBUG) cvNamedWindow("Source Image");
-	if(DEBUG) cvSetMouseCallback("Source Image", mousePositionOut, &src);
-	if(DEBUG) imshow("Source Image",src);
+	
 
+	if(DEBUG & 0x01) cvNamedWindow("Source Image");
+	if(DEBUG & 0x01) cvSetMouseCallback("Source Image", mousePositionOut, &src);
+	if(DEBUG & 0x01) imshow("Source Image",src);
+
+	extractPoints(0,0);
+	cvNamedWindow("Fine Tune");
+	cvSetMouseCallback("Fine Tune", mouseInteractPoints, &src);
+	interactPoints(0,0);
+
+	//if(DEBUG & 0x01) 
+	waitKey(0);
 	extractBook(0,0);
 	imwrite("out.jpg",extrxtd);
-
-	//if(DEBUG) 
-		waitKey(0);
 	return 0;
 }
