@@ -1,2 +1,2 @@
 # bookcover
-This project was an attempt to use openCV for organizing my bookshelfs!
+This project was an attempt to organizing my bookshelves using the magic of OpenCV!
